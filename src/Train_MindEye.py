@@ -30,6 +30,7 @@ torch.backends.cuda.matmul.allow_tf32 = True
 
 # custom models and functions #
 import utils
+import dataloader
 from models import Clipper, BrainNetwork, BrainDiffusionPrior, BrainDiffusionPriorOld, VersatileDiffusionPriorNetwork
 
 # Multi-GPU config #
@@ -216,32 +217,47 @@ if use_image_aug:
 # In[6]:
 
 
-print('Pulling NSD webdataset data...')
+# print('Pulling NSD webdataset data...')
 
-train_url = "{" + f"{data_path}/webdataset_avg_split/train/train_subj0{subj}_" + "{0..17}.tar," + f"{data_path}/webdataset_avg_split/val/val_subj0{subj}_0.tar" + "}"
-val_url = f"{data_path}/webdataset_avg_split/test/test_subj0{subj}_" + "{0..1}.tar"
-print(train_url,"\n",val_url)
-meta_url = f"{data_path}/webdataset_avg_split/metadata_subj0{subj}.json"
-num_train = 8559 + 300
-num_val = 982
+# train_url = "{" + f"{data_path}/webdataset_avg_split/train/train_subj0{subj}_" + "{0..17}.tar," + f"{data_path}/webdataset_avg_split/val/val_subj0{subj}_0.tar" + "}"
+# val_url = f"{data_path}/webdataset_avg_split/test/test_subj0{subj}_" + "{0..1}.tar"
+# print(train_url,"\n",val_url)
+# meta_url = f"{data_path}/webdataset_avg_split/metadata_subj0{subj}.json"
+# num_train = 8559 + 300
+# num_val = 982
+
+fmri_path = os.path.join(data_path, "nsddata", f"subj{subj}_masked_betas.npy")
+stimulus_path = os.path.join(data_path, "nsddata_stimuli", "stimuli", "nsd", "nsd_stimuli.hdf5")
+train_idx_path = os.path.join(data_path, "nsddata", f"subj{subj}_train_idx.npy")
+val_idx_path = os.path.join(data_path, "nsddata", f"subj{subj}_val_idx.npy")
+
 
 print('Prepping train and validation dataloaders...')
-train_dl, val_dl, num_train, num_val = utils.get_dataloaders(
-    batch_size,'images',
-    num_devices=num_devices,
-    num_workers=num_workers,
-    train_url=train_url,
-    val_url=val_url,
-    meta_url=meta_url,
-    num_train=num_train,
-    num_val=num_val,
-    val_batch_size=300,
-    cache_dir=data_path, #"/tmp/wds-cache",
-    seed=seed,
-    voxels_key='nsdgeneral.npy',
-    to_tuple=["voxels", "images", "coco"],
-    local_rank=local_rank,
-    world_size=world_size,
+# train_dl, val_dl, num_train, num_val = utils.get_dataloaders(
+#     batch_size,'images',
+#     num_devices=num_devices,
+#     num_workers=num_workers,
+#     train_url=train_url,
+#     val_url=val_url,
+#     meta_url=meta_url,
+#     num_train=num_train,
+#     num_val=num_val,
+#     val_batch_size=300,
+#     cache_dir=data_path, #"/tmp/wds-cache",
+#     seed=seed,
+#     voxels_key='nsdgeneral.npy',
+#     to_tuple=["voxels", "images", "coco"],
+#     local_rank=local_rank,
+#     world_size=world_size,
+# )
+train_dl, val_dl, num_train, num_val = dataloader.get_dataloaders(
+    fmri_path=fmri_path,
+    stimulus_path=stimulus_path,
+    train_idx_path=train_idx_path,
+    val_idx_path=val_idx_path,
+    batch_size=batch_size,
+    transform_image=img_augment,
+    transform_fmri=None,
 )
 
 
@@ -417,17 +433,41 @@ elif n_samples_save > 0:
     print('Creating SD image variations reconstruction pipeline...')
     from diffusers import AutoencoderKL, UNet2DConditionModel, UniPCMultistepScheduler
 
-    sd_cache_dir = '/fsx/home-paulscotti/.cache/huggingface/diffusers/models--lambdalabs--sd-image-variations-diffusers/snapshots/a2a13984e57db80adcc9e3f85d568dcccb9b29fc'
-    unet = UNet2DConditionModel.from_pretrained(sd_cache_dir,subfolder="unet").to(device)
+    # sd_cache_dir = '/fsx/home-paulscotti/.cache/huggingface/diffusers/models--lambdalabs--sd-image-variations-diffusers/snapshots/a2a13984e57db80adcc9e3f85d568dcccb9b29fc'
+    sd_cache_dir = "/oak/stanford/groups/anishm/fMRI_datasets/NSD/sd_cache"
+    sd_model_id = "lambdalabs/sd-image-variations-diffusers"
+    
+    try:
+        unet = UNet2DConditionModel.from_pretrained(sd_cache_dir,subfolder="unet").to(device)
+    except:
+        print("Downloading SD image variations UNet to", sd_cache_dir)
+        unet = UNet2DConditionModel.from_pretrained(
+                sd_model_id,
+                subfolder="unet",
+                cache_dir=sd_cache_dir).to(device)
 
     unet.eval() # dont want to train model
     unet.requires_grad_(False) # dont need to calculate gradients
 
-    vae = AutoencoderKL.from_pretrained(sd_cache_dir,subfolder="vae").to(device)
+    try:
+        vae = AutoencoderKL.from_pretrained(sd_cache_dir,subfolder="vae").to(device)
+    except:
+        print("Downloading SD image variations VAE to", sd_cache_dir)
+        vae = AutoencoderKL.from_pretrained(
+                sd_model_id,
+                subfolder="vae",
+                cache_dir=sd_cache_dir).to(device)
     vae.eval()
     vae.requires_grad_(False)
 
-    noise_scheduler = UniPCMultistepScheduler.from_pretrained(sd_cache_dir, subfolder="scheduler")
+    try:
+        noise_scheduler = UniPCMultistepScheduler.from_pretrained(sd_cache_dir, subfolder="scheduler")
+    except:
+        print("Downloading SD image variations scheduler to", sd_cache_dir)
+        noise_scheduler = UniPCMultistepScheduler.from_pretrained(
+                sd_model_id,
+                subfolder="scheduler",
+                cache_dir=sd_cache_dir)
     num_inference_steps = 20
     
 def save_ckpt(tag):    
