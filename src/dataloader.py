@@ -57,12 +57,6 @@ class NSDDataset(Dataset):
         }
 
     def __del__(self):
-        if self.fmri_data:
-            try: self.fmri_data.close()
-            except: pass
-        if self.trial_idx:
-            try: self.trial_idx.close()
-            except: pass
         if self.stim_file:
             try: self.stim_file.close()
             except: pass
