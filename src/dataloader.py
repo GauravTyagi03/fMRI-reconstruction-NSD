@@ -65,7 +65,7 @@ class NSDDataset(Dataset):
             except: pass
 
 
-def get_dataloaders(fmri_dir,
+def get_dataloaders(fmri_path,
                     stimulus_path,
                     train_idx_path,
                     val_idx_path,
@@ -73,8 +73,8 @@ def get_dataloaders(fmri_dir,
                     transform_image=None,
                     transform_fmri=None):
 
-    train_ds = NSDDataset(fmri_dir, stimulus_path, train_idx_path, transform_image=transform_image, transform_fmri=transform_fmri)
-    val_ds = NSDDataset(fmri_dir, stimulus_path, val_idx_path, transform_image=transform_image, transform_fmri=transform_fmri)
+    train_ds = NSDDataset(fmri_path, stimulus_path, train_idx_path, transform_image=transform_image, transform_fmri=transform_fmri)
+    val_ds = NSDDataset(fmri_path, stimulus_path, val_idx_path, transform_image=transform_image, transform_fmri=transform_fmri)
 
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=0)
     val_dl = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=0)
