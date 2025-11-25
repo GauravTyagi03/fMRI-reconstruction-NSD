@@ -30,7 +30,7 @@ export VECLIB_MAXIMUM_THREADS=${N}
 export NUMEXPR_NUM_THREADS=${N}
 
 # PyTorch CUDA memory settings
-export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+#export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 
 # Run training with accelerate launch (single GPU)
 accelerate launch --num_processes 1 Train_MindEye.py \
