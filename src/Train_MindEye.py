@@ -635,7 +635,8 @@ for epoch in progress_bar:
                 # plt.imshow(utils.torch_to_Image(image))
                 # plt.show()
 
-            voxel = voxel[:,repeat_index].float()
+            #voxel = voxel[:,repeat_index].float()
+            voxel = voxel.float()
 
             if epoch < int(mixup_pct * num_epochs):
                 voxel, perm, betas, select = utils.mixco(voxel)
@@ -707,7 +708,8 @@ for epoch in progress_bar:
                 # repeat_index = val_i % 3
 
                 # voxel = voxel[:,repeat_index].float()
-                voxel = torch.mean(voxel,axis=1).float()
+                #voxel = torch.mean(voxel,axis=1).float()
+                voxel = voxel.float()
                 
                 if use_image_aug:
                     if image.ndim == 5:
