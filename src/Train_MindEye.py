@@ -226,10 +226,10 @@ if use_image_aug:
 # num_train = 8559 + 300
 # num_val = 982
 
-fmri_path = os.path.join(data_path, "nsddata", f"subj{subj}_masked_betas.npy")
+fmri_path = os.path.join(data_path, "nsddata", f"subj0{subj}_masked_betas.npy")
 stimulus_path = os.path.join(data_path, "nsddata_stimuli", "stimuli", "nsd", "nsd_stimuli.hdf5")
-train_idx_path = os.path.join(data_path, "nsddata", f"subj{subj}_train_idx.npy")
-val_idx_path = os.path.join(data_path, "nsddata", f"subj{subj}_val_idx.npy")
+train_idx_path = os.path.join(data_path, "nsddata", f"subj0{subj}_train_idx.npy")
+val_idx_path = os.path.join(data_path, "nsddata", f"subj0{subj}_val_idx.npy")
 
 
 print('Prepping train and validation dataloaders...')
