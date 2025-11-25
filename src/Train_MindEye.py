@@ -629,6 +629,8 @@ for epoch in progress_bar:
             repeat_index = train_i % 3
             
             if use_image_aug:
+                if image.ndim == 5:
+                    image = image.squeeze(1)
                 image = img_augment(image)
                 # plt.imshow(utils.torch_to_Image(image))
                 # plt.show()
@@ -708,6 +710,8 @@ for epoch in progress_bar:
                 voxel = torch.mean(voxel,axis=1).float()
                 
                 if use_image_aug:
+                    if image.ndim == 5:
+                        image = image.squeeze(1)
                     image = img_augment(image)
 
                 if val_image0 is None:
