@@ -50,11 +50,7 @@ class NSDDataset(Dataset):
         img = self.transform_image(img)
 
         # return structure matching paper’s expected tuple
-        return {
-            "voxel": fmri,
-            "image": img,
-            "coco": img_idx
-        }
+        return fmri, img, img_idx
 
     def __del__(self):
         if self.stim_file:
