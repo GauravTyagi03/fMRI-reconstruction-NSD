@@ -1,4 +1,4 @@
-name: mindeye
+name: mindeye_conda
 channels:
   - conda-forge
   - defaults

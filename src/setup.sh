@@ -3,9 +3,10 @@
 # See the environment.yaml file for "conda env export > environment.yaml" after running this.
 
 set -e
+source oak/stanford/groups/anishm/gtyagi/miniconda3/etc/profile.d/conda.sh
 
-conda create -n mindeye python=3.10.8 -y
-conda activate mindeye
+conda create -n mindeye_conda python=3.10.8 -y
+conda activate mindeye_conda
 
 conda install numpy matplotlib tqdm scikit-image jupyterlab -y
 conda install -c conda-forge accelerate -y

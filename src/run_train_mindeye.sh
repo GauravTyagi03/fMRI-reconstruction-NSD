@@ -11,13 +11,14 @@
 #SBATCH -C GPU_SKU:H100_SXM5
 #SBATCH --mem=64G
 #SBATCH -n 1
-#SBATCH --mail-type=END, FAIL
+#SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=gtyagi@stanford.edu
 
 # Environment setup
 source ~/.bashrc
-source mindeye/bin/activate
-#conda activate mindeye  # Update this to your conda environment name
+#source mindeye/bin/activate
+conda activate mindeye_conda  # Update this to your conda environment name
+export PYTHONPATH=""
 cd /oak/stanford/groups/anishm/gtyagi/mindeye/fMRI-reconstruction-NSD/src  # Update path to your project directory
 
 # Thread settings for CPU operations
