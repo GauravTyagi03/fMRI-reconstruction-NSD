@@ -40,4 +40,5 @@ accelerate launch --num_processes 1 Train_MindEye.py \
     --clip_variant=ViT-L/14 \
     --data_path="/oak/stanford/groups/anishm/fMRI_datasets/NSD" \
     --vd_cache_dir="/oak/stanford/groups/anishm/fMRI_datasets/NSD/vd_cache"
+    --max_lr=1e-4
 

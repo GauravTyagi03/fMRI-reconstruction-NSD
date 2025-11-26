@@ -35,7 +35,8 @@ from models import Clipper, BrainNetwork, BrainDiffusionPrior, BrainDiffusionPri
 
 # Multi-GPU config #
 from accelerate import Accelerator
-accelerator = Accelerator(split_batches=False,mixed_precision='fp16')  
+# Use bf16 for better numerical stability on A100 GPUs
+accelerator = Accelerator(split_batches=False,mixed_precision='bf16')
 print("PID of this process =",os.getpid())
 print = accelerator.print # only print if local_rank=0
 device = accelerator.device
@@ -638,8 +639,16 @@ for epoch in progress_bar:
             #voxel = voxel[:,repeat_index].float()
             voxel = voxel.float()
             if torch.isnan(voxel).any() or torch.isinf(voxel).any():
-                print(f"CRITICAL ERROR: Input voxels contain NaNs or Infs at index {train_i}!")
+                print(f"CRITICAL ERROR: Input voxels contain NaNs or Infs at batch {train_i}!")
                 continue # Skip this batch
+
+            # Check for extreme values in input that could cause numerical instability
+            voxel_max = voxel.abs().max()
+            if voxel_max > 1e4:
+                print(f"WARNING: Very large voxel values detected (max={voxel_max:.2f}) at batch {train_i}. Consider normalizing your data.")
+
+            if train_i == 0 and epoch == 0:
+                print(f"First batch stats - voxel range: [{voxel.min():.3f}, {voxel.max():.3f}], mean: {voxel.mean():.3f}, std: {voxel.std():.3f}")
 
             if epoch < int(mixup_pct * num_epochs):
                 voxel, perm, betas, select = utils.mixco(voxel)
@@ -697,26 +706,32 @@ for epoch in progress_bar:
             
             # Check for NaN in gradients before clipping
             has_nan_grad = False
+            nan_param_name = None
             unwrapped_model = accelerator.unwrap_model(diffusion_prior)
             for name, param in unwrapped_model.named_parameters():
                 if param.grad is not None:
                     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                        print(f'WARNING: NaN/Inf gradients detected in {name} at epoch {epoch}, batch {train_i}. Skipping optimizer step.')
+                        nan_param_name = name
+                        grad_stats = f"grad_mean={param.grad.mean():.6f}, grad_std={param.grad.std():.6f}, grad_max={param.grad.abs().max():.6f}"
+                        param_stats = f"param_mean={param.data.mean():.6f}, param_std={param.data.std():.6f}, param_max={param.data.abs().max():.6f}"
+                        print(f'NaN/Inf in {name} at epoch {epoch}, batch {train_i}')
+                        print(f'  Gradient stats: {grad_stats}')
+                        print(f'  Parameter stats: {param_stats}')
                         has_nan_grad = True
                         break
-            
-            if not has_nan_grad:
-                # Apply gradient clipping to prevent explosion
-                # Use accelerator's clip_grad_norm_ which is aware of the scaler
-                accelerator.clip_grad_norm_(unwrapped_model.parameters(), max_norm=1.0)
 
-                # Step optimizer normally - Accelerate handles scaler internally
-                optimizer.step()
-            else:
-                # If NaN gradients detected, skip the optimizer step entirely
-                # Just zero the gradients - don't call optimizer.step() to avoid scaler state issues
+            if has_nan_grad:
+                # If NaN gradients detected, skip this batch entirely
                 optimizer.zero_grad()
-                print(f'WARNING: NaN/Inf gradients detected at epoch {epoch}, batch {train_i}. Skipping optimizer step.')
+                print(f'Skipping batch {train_i} due to NaN in {nan_param_name}')
+                continue  # Skip to next batch without updating anything
+
+            # Apply gradient clipping to prevent explosion
+            # Use accelerator's clip_grad_norm_ which is aware of the scaler
+            accelerator.clip_grad_norm_(unwrapped_model.parameters(), max_norm=1.0)
+
+            # Step optimizer normally - Accelerate handles scaler internally
+            optimizer.step()
 
             losses.append(loss.item())
             lrs.append(optimizer.param_groups[0]['lr'])
@@ -727,8 +742,8 @@ for epoch in progress_bar:
 
             sims_base += nn.functional.cosine_similarity(clip_target_norm,clip_voxels_norm).mean().item()
 
-            # forward and backward top 1 accuracy        
-            labels = torch.arange(len(clip_target_norm)).to(device) 
+            # forward and backward top 1 accuracy
+            labels = torch.arange(len(clip_target_norm)).to(device)
             fwd_percent_correct += utils.topk(utils.batchwise_cosine_similarity(clip_voxels_norm,clip_target_norm), labels, k=1)
             bwd_percent_correct += utils.topk(utils.batchwise_cosine_similarity(clip_target_norm, clip_voxels_norm), labels, k=1)
 
