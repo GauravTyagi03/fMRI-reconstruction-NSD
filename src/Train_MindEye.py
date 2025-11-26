@@ -637,6 +637,9 @@ for epoch in progress_bar:
 
             #voxel = voxel[:,repeat_index].float()
             voxel = voxel.float()
+            if torch.isnan(voxel).any() or torch.isinf(voxel).any():
+                print(f"CRITICAL ERROR: Input voxels contain NaNs or Infs at index {train_i}!")
+                continue # Skip this batch
 
             if epoch < int(mixup_pct * num_epochs):
                 voxel, perm, betas, select = utils.mixco(voxel)
@@ -669,20 +672,63 @@ for epoch in progress_bar:
                     clip_target_norm,
                     temp=epoch_temp)
                 
+            # Enhanced NaN detection for individual loss components
             if prior and v2c:
+                if torch.isnan(loss_nce).any() or torch.isinf(loss_nce).any():
+                    raise ValueError(f'NaN/Inf in loss_nce at epoch {epoch}, batch {train_i}. loss_nce={loss_nce.item()}')
+                if torch.isnan(loss_prior).any() or torch.isinf(loss_prior).any():
+                    raise ValueError(f'NaN/Inf in loss_prior at epoch {epoch}, batch {train_i}. loss_prior={loss_prior.item()}')
                 loss_nce_sum += loss_nce.item()
                 loss_prior_sum += loss_prior.item()
                 loss = loss_nce + (prior_mult * loss_prior)
             elif v2c:
+                if torch.isnan(loss_nce).any() or torch.isinf(loss_nce).any():
+                    raise ValueError(f'NaN/Inf in loss_nce at epoch {epoch}, batch {train_i}. loss_nce={loss_nce.item()}')
                 loss_nce_sum += loss_nce.item()
                 loss = loss_nce
             elif prior:
+                if torch.isnan(loss_prior).any() or torch.isinf(loss_prior).any():
+                    raise ValueError(f'NaN/Inf in loss_prior at epoch {epoch}, batch {train_i}. loss_prior={loss_prior.item()}')
                 loss_prior_sum += loss_prior.item()
                 loss = prior_mult * loss_prior
             utils.check_loss(loss)
             
             accelerator.backward(loss)
-            optimizer.step()
+            
+            # Unscale gradients before clipping (required for mixed precision)
+            # Accelerate handles scaling in backward(), so we need to unscale before clipping
+            if accelerator.scaler is not None:
+                accelerator.scaler.unscale_(optimizer)
+            
+            # Check for NaN in gradients before clipping
+            has_nan_grad = False
+            # Access unwrapped model for gradient checking
+            unwrapped_model = accelerator.unwrap_model(diffusion_prior)
+            for name, param in unwrapped_model.named_parameters():
+                if param.grad is not None:
+                    if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                        print(f'WARNING: NaN/Inf gradients detected in {name} at epoch {epoch}, batch {train_i}. Skipping optimizer step.')
+                        has_nan_grad = True
+                        break
+            
+            if not has_nan_grad:
+                # Apply gradient clipping to prevent explosion
+                # Use torch's clip_grad_norm_ after unscaling
+                # Use unwrapped model parameters for clipping
+                torch.nn.utils.clip_grad_norm_(unwrapped_model.parameters(), max_norm=1.0)
+                
+                # Step optimizer with scaler (required after manual unscaling)
+                if accelerator.scaler is not None:
+                    accelerator.scaler.step(optimizer)
+                    accelerator.scaler.update()
+                else:
+                    optimizer.step()
+            else:
+                # Skip optimizer step if gradients contain NaN/Inf, but still update scaler
+                if accelerator.scaler is not None:
+                    accelerator.scaler.update()  # Update scaler even if skipping step
+                optimizer.zero_grad()
+                print(f'Skipped optimizer step due to NaN/Inf gradients at epoch {epoch}, batch {train_i}')
 
             losses.append(loss.item())
             lrs.append(optimizer.param_groups[0]['lr'])
@@ -747,14 +793,23 @@ for epoch in progress_bar:
                         clip_target_norm,
                         temp=epoch_temp)
 
+                # Enhanced NaN detection for individual loss components (validation)
                 if prior and v2c:
+                    if torch.isnan(val_loss_nce).any() or torch.isinf(val_loss_nce).any():
+                        raise ValueError(f'NaN/Inf in val_loss_nce at epoch {epoch}, batch {val_i}. val_loss_nce={val_loss_nce.item()}')
+                    if torch.isnan(val_loss_prior).any() or torch.isinf(val_loss_prior).any():
+                        raise ValueError(f'NaN/Inf in val_loss_prior at epoch {epoch}, batch {val_i}. val_loss_prior={val_loss_prior.item()}')
                     val_loss_nce_sum += val_loss_nce.item()
                     val_loss_prior_sum += val_loss_prior.item()
                     val_loss = val_loss_nce + (prior_mult * val_loss_prior)
                 elif v2c:
+                    if torch.isnan(val_loss_nce).any() or torch.isinf(val_loss_nce).any():
+                        raise ValueError(f'NaN/Inf in val_loss_nce at epoch {epoch}, batch {val_i}. val_loss_nce={val_loss_nce.item()}')
                     val_loss_nce_sum += val_loss_nce.item()
                     val_loss = val_loss_nce
                 elif prior:
+                    if torch.isnan(val_loss_prior).any() or torch.isinf(val_loss_prior).any():
+                        raise ValueError(f'NaN/Inf in val_loss_prior at epoch {epoch}, batch {val_i}. val_loss_prior={val_loss_prior.item()}')
                     val_loss_prior_sum += val_loss_prior.item()
                     val_loss = prior_mult * val_loss_prior
                 utils.check_loss(val_loss)
