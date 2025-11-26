@@ -707,18 +707,16 @@ for epoch in progress_bar:
             
             if not has_nan_grad:
                 # Apply gradient clipping to prevent explosion
-                # Accelerate handles mixed precision internally, so we clip the gradients directly
-                # The gradients may be scaled, but clipping will still prevent explosion
-                torch.nn.utils.clip_grad_norm_(unwrapped_model.parameters(), max_norm=1.0)
+                # Use accelerator's clip_grad_norm_ which is aware of the scaler
+                accelerator.clip_grad_norm_(unwrapped_model.parameters(), max_norm=1.0)
+
+                # Step optimizer normally - Accelerate handles scaler internally
+                optimizer.step()
             else:
-                # If NaN gradients detected, zero them to prevent updates
-                # Accelerate's scaler will handle the state correctly
+                # If NaN gradients detected, skip the optimizer step entirely
+                # Just zero the gradients - don't call optimizer.step() to avoid scaler state issues
                 optimizer.zero_grad()
-                print(f'WARNING: NaN/Inf gradients detected at epoch {epoch}, batch {train_i}. Zeroing gradients.')
-            
-            # Step optimizer - Accelerate handles scaler internally
-            # Even if gradients are zero or contain NaN, Accelerate will handle it correctly
-            optimizer.step()
+                print(f'WARNING: NaN/Inf gradients detected at epoch {epoch}, batch {train_i}. Skipping optimizer step.')
 
             losses.append(loss.item())
             lrs.append(optimizer.param_groups[0]['lr'])
