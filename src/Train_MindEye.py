@@ -724,10 +724,14 @@ for epoch in progress_bar:
                 else:
                     optimizer.step()
             else:
-                # Skip optimizer step if gradients contain NaN/Inf, but still update scaler
-                if accelerator.scaler is not None:
-                    accelerator.scaler.update()  # Update scaler even if skipping step
+                # Skip optimizer step if gradients contain NaN/Inf
+                # Zero gradients first, then call scaler.step() (which will skip internally) and update()
                 optimizer.zero_grad()
+                if accelerator.scaler is not None:
+                    # Call step() even when skipping - scaler will handle it internally
+                    # This is required before update() to maintain scaler state consistency
+                    accelerator.scaler.step(optimizer)
+                    accelerator.scaler.update()
                 print(f'Skipped optimizer step due to NaN/Inf gradients at epoch {epoch}, batch {train_i}')
 
             losses.append(loss.item())
