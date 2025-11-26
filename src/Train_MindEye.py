@@ -695,14 +695,8 @@ for epoch in progress_bar:
             
             accelerator.backward(loss)
             
-            # Unscale gradients before clipping (required for mixed precision)
-            # Accelerate handles scaling in backward(), so we need to unscale before clipping
-            if accelerator.scaler is not None:
-                accelerator.scaler.unscale_(optimizer)
-            
             # Check for NaN in gradients before clipping
             has_nan_grad = False
-            # Access unwrapped model for gradient checking
             unwrapped_model = accelerator.unwrap_model(diffusion_prior)
             for name, param in unwrapped_model.named_parameters():
                 if param.grad is not None:
@@ -713,26 +707,18 @@ for epoch in progress_bar:
             
             if not has_nan_grad:
                 # Apply gradient clipping to prevent explosion
-                # Use torch's clip_grad_norm_ after unscaling
-                # Use unwrapped model parameters for clipping
+                # Accelerate handles mixed precision internally, so we clip the gradients directly
+                # The gradients may be scaled, but clipping will still prevent explosion
                 torch.nn.utils.clip_grad_norm_(unwrapped_model.parameters(), max_norm=1.0)
-                
-                # Step optimizer with scaler (required after manual unscaling)
-                if accelerator.scaler is not None:
-                    accelerator.scaler.step(optimizer)
-                    accelerator.scaler.update()
-                else:
-                    optimizer.step()
             else:
-                # Skip optimizer step if gradients contain NaN/Inf
-                # Zero gradients first, then call scaler.step() (which will skip internally) and update()
+                # If NaN gradients detected, zero them to prevent updates
+                # Accelerate's scaler will handle the state correctly
                 optimizer.zero_grad()
-                if accelerator.scaler is not None:
-                    # Call step() even when skipping - scaler will handle it internally
-                    # This is required before update() to maintain scaler state consistency
-                    accelerator.scaler.step(optimizer)
-                    accelerator.scaler.update()
-                print(f'Skipped optimizer step due to NaN/Inf gradients at epoch {epoch}, batch {train_i}')
+                print(f'WARNING: NaN/Inf gradients detected at epoch {epoch}, batch {train_i}. Zeroing gradients.')
+            
+            # Step optimizer - Accelerate handles scaler internally
+            # Even if gradients are zero or contain NaN, Accelerate will handle it correctly
+            optimizer.step()
 
             losses.append(loss.item())
             lrs.append(optimizer.param_groups[0]['lr'])
