@@ -24,6 +24,8 @@ class NSDDataset(Dataset):
         self.stimulus_path = stimulus_path
         self.trial_idx = np.load(trial_idx_path)
         self.fmri_data = np.load(fmri_path)
+        # Convert from int16 format back to percent signal change
+        self.fmri_data = self.fmri_data.astype(np.float32) / 300.0
         if self.trial_idx.shape[0] == 2 and self.trial_idx.shape[1] != 2:
             self.trial_idx = self.trial_idx.T  # ensure shape [N, 2]
         self.transform_image = transform_image or transforms.ToTensor()
