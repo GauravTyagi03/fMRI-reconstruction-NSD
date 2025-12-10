@@ -19,6 +19,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from torch._C import NoneType
 import torch.nn as nn
 from torchvision import transforms
 from tqdm import tqdm
@@ -26,6 +27,7 @@ from datetime import datetime
 import webdataset as wds
 import PIL
 import argparse
+import dataloader
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 local_rank = 0
@@ -63,7 +65,7 @@ if utils.is_interactive():
 
 parser = argparse.ArgumentParser(description="Model Training Configuration")
 parser.add_argument(
-    "--model_name", type=str, default="testing",
+    "--model_name", type=str, default="mindeye_test1",
     help="name of trained model",
 )
 parser.add_argument(
@@ -71,7 +73,7 @@ parser.add_argument(
     help="name of trained autoencoder model",
 )
 parser.add_argument(
-    "--data_path", type=str, default="/fsx/proj-medarc/fmri/natural-scenes-dataset",
+    "--data_path", type=str, default="/oak/stanford/groups/anishm/fMRI_datasets/NSD/nsddata_stimuli/stimuli/nsd",
     help="Path to where NSD data is stored (see README)",
 )
 parser.add_argument(
@@ -127,21 +129,37 @@ print("subj",subj,"num_voxels",num_voxels)
 
 # In[5]:
 
+data_path = "/oak/stanford/groups/anishm/fMRI_datasets/NSD"
+fmri_path = os.path.join(data_path, "nsddata", f"subj0{subj}_masked_betas.npy")
+stimulus_path = os.path.join(data_path, "nsddata_stimuli", "stimuli", "nsd", "nsd_stimuli.hdf5")
+train_idx_path = os.path.join(data_path, "nsddata", f"subj0{subj}_train_idx.npy")
+val_idx_path = os.path.join(data_path, "nsddata", f"subj0{subj}_val_idx.npy")
 
-val_url = f"{data_path}/webdataset_avg_split/test/test_subj0{subj}_" + "{0..1}.tar"
-meta_url = f"{data_path}/webdataset_avg_split/metadata_subj0{subj}.json"
-num_train = 8559 + 300
-num_val = 982
-batch_size = val_batch_size = 1
-voxels_key = 'nsdgeneral.npy' # 1d inputs
+train_dl, val_dl, num_train, num_val = dataloader.get_dataloaders(
+    fmri_path=fmri_path,
+    stimulus_path=stimulus_path,
+    train_idx_path=train_idx_path,
+    val_idx_path=val_idx_path,
+    batch_size=1,
+    transform_image=None,
+    transform_fmri=None,
+)
 
-val_data = wds.WebDataset(val_url, resampled=False)\
-    .decode("torch")\
-    .rename(images="jpg;png", voxels=voxels_key, trial="trial.npy", coco="coco73k.npy", reps="num_uniques.npy")\
-    .to_tuple("voxels", "images", "coco")\
-    .batched(val_batch_size, partial=False)
 
-val_dl = torch.utils.data.DataLoader(val_data, batch_size=None, shuffle=False)
+# val_url = f"{data_path}/webdataset_avg_split/test/test_subj0{subj}_" + "{0..1}.tar"
+# meta_url = f"{data_path}/webdataset_avg_split/metadata_subj0{subj}.json"
+# num_train = 8559 + 300
+# num_val = 982
+# batch_size = val_batch_size = 1
+# voxels_key = 'nsdgeneral.npy' # 1d inputs
+
+# val_data = wds.WebDataset(val_url, resampled=False)\
+#     .decode("torch")\
+#     .rename(images="jpg;png", voxels=voxels_key, trial="trial.npy", coco="coco73k.npy", reps="num_uniques.npy")\
+#     .to_tuple("voxels", "images", "coco")\
+#     .batched(val_batch_size, partial=False)
+
+# val_dl = torch.utils.data.DataLoader(val_data, batch_size=None, shuffle=False)
 
 # check that your data loader is working
 for val_i, (voxel, img_input, coco) in enumerate(val_dl):
@@ -346,7 +364,8 @@ if img_variations:
 else:
     guidance_scale = 3.5
     
-ind_include = np.arange(num_val)
+# ind_include = np.arange(num_val)
+ind_include = np.arange(50)
 all_brain_recons = None
     
 only_lowlevel = False
