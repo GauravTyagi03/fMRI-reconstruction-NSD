@@ -204,17 +204,29 @@ from diffusers import VersatileDiffusionDualGuidedPipeline, UniPCMultistepSchedu
 from diffusers.models import DualTransformer2DModel
 try:
     vd_pipe =  VersatileDiffusionDualGuidedPipeline.from_pretrained(vd_cache_dir).to(device).to(torch.float16)
+    # If loading from cache_dir path directly, scheduler should be in same location
+    try:
+        vd_pipe.scheduler = UniPCMultistepScheduler.from_pretrained(vd_cache_dir, subfolder="scheduler")
+    except:
+        # If scheduler not found, load from model ID with cache_dir
+        vd_pipe.scheduler = UniPCMultistepScheduler.from_pretrained(
+            "shi-labs/versatile-diffusion", 
+            subfolder="scheduler",
+            cache_dir=vd_cache_dir)
 except:
     print("Downloading Versatile Diffusion to", vd_cache_dir)
     vd_pipe =  VersatileDiffusionDualGuidedPipeline.from_pretrained(
             "shi-labs/versatile-diffusion",
             cache_dir = vd_cache_dir).to(device).to(torch.float16)
+    # Load scheduler from model ID with same cache_dir
+    vd_pipe.scheduler = UniPCMultistepScheduler.from_pretrained(
+        "shi-labs/versatile-diffusion", 
+        subfolder="scheduler",
+        cache_dir=vd_cache_dir)
 vd_pipe.image_unet.eval()
 vd_pipe.vae.eval()
 vd_pipe.image_unet.requires_grad_(False)
 vd_pipe.vae.requires_grad_(False)
-
-vd_pipe.scheduler = UniPCMultistepScheduler.from_pretrained(vd_cache_dir, subfolder="scheduler")
 num_inference_steps = 20
 
 # Set weighting of Dual-Guidance 
