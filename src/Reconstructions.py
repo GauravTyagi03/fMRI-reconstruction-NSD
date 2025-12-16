@@ -417,7 +417,7 @@ for val_i, (voxel, img, coco) in enumerate(tqdm(val_dl,total=len(ind_include))):
                 text_token = None,
                 img_lowlevel = blurry_recons,
                 num_inference_steps = num_inference_steps,
-                n_samples_save = batch_size,
+                n_samples_save = 1,
                 recons_per_sample = recons_per_sample,
                 guidance_scale = guidance_scale,
                 img2img_strength = img2img_strength, # 0=fully rely on img_lowlevel, 1=not doing img2img
