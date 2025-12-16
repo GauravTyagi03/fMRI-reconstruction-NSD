@@ -17,7 +17,8 @@ all_images = transforms.Resize((imsize, imsize))(all_images)
 all_brain_recons = transforms.Resize((imsize, imsize))(all_brain_recons)
 
 # Display and save specific samples
-sample_indices = [112, 119, 101, 44, 159]  # Example indices
+# Updated to use valid indices (0-49) since only 50 samples were processed
+sample_indices = [0, 10, 20, 30, 44]  # Example indices
 
 for idx in sample_indices:
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
