@@ -392,7 +392,8 @@ else:
 for val_i, (voxel, img, coco) in enumerate(tqdm(val_dl,total=len(ind_include))):
     if val_i<np.min(ind_include):
         continue
-    voxel = torch.mean(voxel,axis=1).to(device)
+    voxel = voxel.to(device)
+    # voxel = torch.mean(voxel,axis=1).to(device)  # Old line - was collapsing voxel dimension
     # voxel = voxel[:,0].to(device)
     
     with torch.no_grad():
