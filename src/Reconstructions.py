@@ -375,11 +375,13 @@ if img_variations:
     guidance_scale = 7.5
 else:
     guidance_scale = 3.5
-    
-# ind_include = np.arange(num_val)
-ind_include = np.arange(50)
+
+# Specify which samples to reconstruct from train and val sets
+train_sample_idx = 0  # Index of training sample to reconstruct
+val_sample_idx = 0    # Index of validation sample to reconstruct
+
 all_brain_recons = None
-    
+
 only_lowlevel = False
 if img2img_strength == 1:
     img2img = False
@@ -388,62 +390,70 @@ elif img2img_strength == 0:
     only_lowlevel = True
 else:
     img2img = True
-    
-for val_i, (voxel, img, coco) in enumerate(tqdm(val_dl,total=len(ind_include))):
-    if val_i<np.min(ind_include):
-        continue
-    voxel = voxel.to(device)
-    # voxel = torch.mean(voxel,axis=1).to(device)  # Old line - was collapsing voxel dimension
-    # voxel = voxel[:,0].to(device)
-    
-    with torch.no_grad():
-        if img2img:
-            ae_preds = voxel2sd(voxel.float())
-            blurry_recons = vd_pipe.vae.decode(ae_preds.to(device).half()/0.18215).sample / 2 + 0.5
 
-            if val_i==0:
-                plt.imshow(utils.torch_to_Image(blurry_recons))
-                plt.show()
-        else:
-            blurry_recons = None
+# Process samples from both train and val dataloaders
+dataloaders = [('train', train_dl, train_sample_idx), ('val', val_dl, val_sample_idx)]
 
-        if only_lowlevel:
-            brain_recons = blurry_recons
-        else:
-            grid, brain_recons, laion_best_picks, recon_img = utils.reconstruction(
-                img, voxel,
-                clip_extractor, unet, vae, noise_scheduler,
-                voxel2clip_cls = None, #diffusion_prior_cls.voxel2clip,
-                diffusion_priors = diffusion_priors,
-                text_token = None,
-                img_lowlevel = blurry_recons,
-                num_inference_steps = num_inference_steps,
-                n_samples_save = 1,
-                recons_per_sample = recons_per_sample,
-                guidance_scale = guidance_scale,
-                img2img_strength = img2img_strength, # 0=fully rely on img_lowlevel, 1=not doing img2img
-                timesteps_prior = 100,
-                seed = seed,
-                retrieve = retrieve,
-                plotting = plotting,
-                img_variations = img_variations,
-                verbose = verbose,
-            )
+for split_name, dataloader, target_idx in dataloaders:
+    print(f"\nReconstructing {split_name} sample at index {target_idx}...")
 
-            if plotting:
-                plt.show()
-                # grid.savefig(f'evals/{model_name}_{val_i}.png')
+    for sample_i, (voxel, img, coco) in enumerate(dataloader):
+        if sample_i != target_idx:
+            continue
 
-            brain_recons = brain_recons[:,laion_best_picks.astype(np.int8)]
+        print(f"Processing {split_name} sample {sample_i}")
+        voxel = voxel.to(device)
+        # voxel = torch.mean(voxel,axis=1).to(device)  # Old line - was collapsing voxel dimension
+        # voxel = voxel[:,0].to(device)
 
-        if all_brain_recons is None:
-            all_brain_recons = brain_recons
-            all_images = img
-        else:
-            all_brain_recons = torch.vstack((all_brain_recons,brain_recons))
-            all_images = torch.vstack((all_images,img))
+        with torch.no_grad():
+            if img2img:
+                ae_preds = voxel2sd(voxel.float())
+                blurry_recons = vd_pipe.vae.decode(ae_preds.to(device).half()/0.18215).sample / 2 + 0.5
 
-    if val_i>=np.max(ind_include):
+                if sample_i==0:
+                    plt.imshow(utils.torch_to_Image(blurry_recons))
+                    plt.show()
+            else:
+                blurry_recons = None
+
+            if only_lowlevel:
+                brain_recons = blurry_recons
+            else:
+                grid, brain_recons, laion_best_picks, recon_img = utils.reconstruction(
+                    img, voxel,
+                    clip_extractor, unet, vae, noise_scheduler,
+                    voxel2clip_cls = None, #diffusion_prior_cls.voxel2clip,
+                    diffusion_priors = diffusion_priors,
+                    text_token = None,
+                    img_lowlevel = blurry_recons,
+                    num_inference_steps = num_inference_steps,
+                    n_samples_save = 1,
+                    recons_per_sample = recons_per_sample,
+                    guidance_scale = guidance_scale,
+                    img2img_strength = img2img_strength, # 0=fully rely on img_lowlevel, 1=not doing img2img
+                    timesteps_prior = 100,
+                    seed = seed,
+                    retrieve = retrieve,
+                    plotting = plotting,
+                    img_variations = img_variations,
+                    verbose = verbose,
+                )
+
+                if plotting:
+                    plt.show()
+                    # grid.savefig(f'evals/{model_name}_{split_name}_{sample_i}.png')
+
+                brain_recons = brain_recons[:,laion_best_picks.astype(np.int8)]
+
+            if all_brain_recons is None:
+                all_brain_recons = brain_recons
+                all_images = img
+            else:
+                all_brain_recons = torch.vstack((all_brain_recons,brain_recons))
+                all_images = torch.vstack((all_images,img))
+
+        # Break after processing the target sample
         break
 
 all_brain_recons = all_brain_recons.view(-1,3,imsize,imsize)
